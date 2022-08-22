@@ -1,0 +1,204 @@
+#!/bin/bash
+
+data=install
+version=1.0
+#检查打包格式
+if [ ! -z "$2" ]; then
+    head_char=`echo $2 | cut -c 1`
+    case "$head_char" in
+        [0-9])
+        version=$2
+        ;;
+        *)
+        echo "error: version number does not start with digit."
+        echo "exit."
+        exit 1
+        ;;
+    esac
+fi
+
+if [ "" = "$1" ]; then
+    echo "输入需要打包目录."
+    echo "$0 打包目录 打包名称 [版本] [信息描述]"
+    exit 1
+fi
+
+#默认名称
+name=Maptool-new
+if [ ! -z "$1" ]; then
+    name=$1
+fi
+if [ "$data" = "$1" ] || [ "$data" = "$1/" ]; then
+    echo "ERROR:打包名称不能与打包目录相同."
+    exit 1
+fi
+echo "打包名称：$name."
+
+for i in `seq 1 ${#name}`;do
+   a=`echo $name|cut -c $i`
+   case "$a" in
+       .|+|/|_)
+       echo "错误"
+       echo "打包名称不允许带‘$a’字符"
+       exit 1
+       ;;
+   esac  
+done
+
+function cmakebuild() {
+    cd $cmakefile
+    cmake ..
+    sleep 1
+    echo "status: 开始编译."
+    echo "time  : $time"
+    make
+}
+
+function deployqtmake() {
+    if [[ ! -e $installdir/maptool ]]; then
+        echo "可执行程序不存在！"
+        exit 1
+    fi
+    cd $installdir
+    linuxdeployqt ./maptool -appimage
+}
+
+function createapprun() {
+    cat /dev/null > $rundir/maptool-run
+    echo "#!/bin/bash" >> $rundir/maptool-run
+    echo "" >> $rundir/maptool-run
+    echo "time=$(date "+%Y%m%d%H%M" | cut -c 3-)" >> $rundir/maptool-run
+    echo "current_path=/opt/cti/kinetic/share/maptool-tool" >> $rundir/maptool-run
+    echo "if [ ! -e \"/usr/lib/x86_64-linux-gnu/OGRE-1.9.0\" ]; then" >> $rundir/maptool-run
+    echo "  echo \"缺少依赖，正在安装...\"" >> $rundir/maptool-run
+    echo "  sudo apt-get install libogre-1.9-dev -y --allow-unauthenticated" >> $rundir/maptool-run
+    echo "  echo \"依赖安装完成.\""
+    echo "fi" >> $rundir/maptool-run
+    echo "" >> $rundir/maptool-run
+    echo "echo \"Status: start run maptool.\"" >> $rundir/maptool-run
+    echo "echo \"Times : \$time\"" >> $rundir/maptool-run
+    echo "\$current_path/AppRun" >> $rundir/maptool-run
+}
+
+time=$(date "+%Y%m%d%H%M" | cut -c 3-)
+arch_system=$(dpkg --print-architecture)
+current_path=$PWD
+
+#############################################################
+cmakefile=$current_path/build
+debdir=$current_path/$data
+installdir=$debdir/opt/cti/kinetic/share/maptool-tool
+rundir=$debdir/usr/bin
+apprundir=$cmakefile/maptool
+dependdir=/usr/lib/x86_64-linux-gnu
+
+# data=$debdir
+echo "打包目录：$debdir."
+
+if [ ! -d "$cmakefile" ]; then
+    echo "创建build文件."
+    mkdir -p $cmakefile
+fi
+
+cmakebuild
+if [ 0 -eq $? ]; then
+    if [ ! -d "$installdir" ]; then
+        echo "创建"
+        mkdir -p $installdir
+    fi
+    echo "移动文件."
+    cp -rf $current_path/ogre_media $installdir
+    cp $apprundir $installdir
+else
+    echo "编译失败."
+    exit 1
+fi
+
+deployqtmake
+if [ 0 -eq $? ]; then
+    echo "qt打包完成."
+fi
+
+if [ ! -d "$rundir" ]; then
+    echo "创建启动文件."
+    mkdir -p $rundir
+fi
+if [ ! -d "$rundir/maptool-run" ]; then
+    touch $rundir/maptool-run
+    chmod 775 $rundir/maptool-run
+    createapprun
+fi
+############################################################################################
+echo "创建DEBIAN文件"
+debiandir=$current_path/DEBIAN
+echo "debiandir: $debiandir"
+if [ ! -d "$debiandir" ]; then
+    mkdir -p $debiandir
+fi
+
+#create changelog 
+if [ ! -f "$debiandir/changelog" ]; then
+    touch $debiandir/changelog
+    chmod 664 $debiandir/changelog
+fi
+echo "$name ($(lsb_release -sd)) $(lsb_release -sc); urgency=medium" >> $debiandir/changelog
+echo "" >> $debiandir/changelog
+echo "  * No ev dep (maybe bad): make deb pack.$3" >> $debiandir/changelog
+echo "" >> $debiandir/changelog
+echo " -- cti <iam@cti.org>  $(date)" >> $debiandir/changelog
+echo "" >> $debiandir/changelog
+    
+#create control
+if [ ! -f "$debiandir/control" ]; then
+    touch $debiandir/control
+    chmod 775 $debiandir/control
+fi
+cat /dev/null > $debiandir/control
+echo "Package: $name" >> $debiandir/control
+echo "Version: $version.$time" >> $debiandir/control
+echo "Section: utils" >> $debiandir/control
+echo "Priority: optional" >> $debiandir/control
+echo "Architecture: $arch_system" >> $debiandir/control
+echo "Maintainer: cti <lrd@cti.com>" >> $debiandir/control
+echo "Depends: " >> $debiandir/control
+echo "Description: $3" >> $debiandir/control
+
+#create postinst
+if [ ! -f "$debiandir/postinst" ]; then 
+    touch $debiandir/postinst
+    chmod 775 $debiandir/postinst
+fi
+cat /dev/null > $debiandir/postinst
+echo "#!/bin/sh" >> $debiandir/postinst
+echo "echo \"update $name system.\"" >> $debiandir/postinst
+if [ -f "$current_path/postinst" ]; then
+    chmod 755 $current_path/postinst
+    cat $PWD/postinst >> $debiandir/postinst
+fi
+echo "echo \"update ok!\"" >> $debiandir/postinst
+
+#create postrm
+if [ ! -f "$debiandir/postrm" ]; then 
+    touch $debiandir/postrm
+    chmod 775 $debiandir/postrm
+fi
+cat /dev/null > $debiandir/postrm
+echo "#!/bin/sh" >> $debiandir/postrm
+if [ -f "$current_path/postrm" ]; then
+    chmod 755 $current_path/postrm
+    cat $PWD/postrm >> $debiandir/postrm
+fi
+echo "echo \"remove $name system.\"" >> $debiandir/postrm
+
+###############################################################
+echo "复制打包数据."
+cp -rf $debdir $current_path/$name
+cp -rf $current_path/DEBIAN $current_path/$name
+
+echo "准备打包，请等待..."
+dpkg -b $current_path/$name $current_path/${name}_V${version}.${time}_${arch_system}.deb
+
+echo "删除缓存数据."
+rm -r $current_path/$name
+rm -r $debiandir
+exit 0

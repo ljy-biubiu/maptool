@@ -1,0 +1,10 @@
+#include "env_config.h"
+
+namespace rviz
+{
+std::string get_ogre_plugin_path()
+{
+  return "@OGRE_PLUGIN_PATH@";
+}
+
+}

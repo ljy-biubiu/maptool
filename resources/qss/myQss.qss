@@ -1,0 +1,37 @@
+QMessageBox {
+        background-color: rgb(46,46,46); /* QMessageBox背景颜色 */
+        qproperty-icon: url(":/res/qt.png");
+}
+
+QMessageBox QLabel { /* textLabel */
+        color: rgb(220,220,220);
+        background-color: transparent;
+        min-width: 250px; /* textLabel设置最小宽度可以相应的改变QMessageBox的最小宽度 */
+        min-height: 60px; /* textLabel和iconLabel高度保持一致 */
+}
+
+QMessageBox QLabel#qt_msgboxex_icon_label { /* iconLabel */
+        width: 40px;
+        height: 40px; /* textLabel和iconLabel高度保持一致 */
+}
+
+QMessageBox QPushButton { /* QMessageBox中的QPushButton样式 */
+        border: 1px solid rgb(246,246,246);
+        border-radius: 3px;
+        background-color: rgb(116,116,116);
+        color: rgb(246,246,246);
+        font-family: "Microsoft YaHei";
+        font-size: 10pt;
+        min-width: 70px;
+        min-height: 25px;
+}
+
+QMessageBox QPushButton:hover {
+        background-color: #7A8B8B;
+        color: rgb(246,246,246);
+}
+
+QMessageBox QPushButton:pressed {
+        background-color: #EEEEEE;
+}
+
